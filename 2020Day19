@@ -1,0 +1,101 @@
+import re
+import logging
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%Y-%m-%d %I:%M:%S')
+logging.getLogger().setLevel(logging.INFO)
+logging.info("Logging set.")
+
+
+def get_string_input(filename):
+    retval = None
+    with open(filename) as IN:
+        retval = IN.read().splitlines()
+    logging.info("Got {} lines from {}.".format(len(retval),filename))
+    return retval
+
+
+def get_syntax_and_messages(lines):
+    ''' Parse input and return two structures: syntax and messages
+            syntax[rule] = [ rule_list1, rule_list2 ]
+             - eg input line = "7: 99 32 | 24 86" --> syntax[7] = [[99,32], [24,86]]
+            message is a list of strings
+    '''
+    rule_re = re.compile('^(\d+): (.*)$')
+    state = 'syntax'
+    syntax = dict()
+    for i, line in enumerate(lines):
+        m1 = rule_re.match(line)
+        if state == 'syntax' and m1 == None:
+            state = 'messages'
+        elif state == 'syntax':
+            key, subrules = m1.groups(1)
+            if subrules == '"a"':
+                syntax[key] = [['a']]  # easier to keep this as a list
+            elif subrules == '"b"':
+                syntax[key] = [['b']]
+            else:
+                syntax[key] = [s.split(' ') for s in subrules.split(' | ')]
+        elif state == 'messages':
+            messages = lines[i:]
+            break
+    return syntax, messages
+
+
+def get_matched_for_list(message, rule_list, syntax):
+    '''  Return a set of valid message[:k] that match the given rule_list
+            message   = a string;  e.g.  'ababaaab'
+            rule_list = a list of integers;  e.g. [8, 11] or [4]
+            syntax    = dict containing rules;  syntax[rule_num] = [ rule_list1, rule_list2 ]
+    '''
+    retval = set()
+    # get matches for first rule
+    prefixes = get_matched_for_rule(message, rule_list[0], syntax)
+    if len(rule_list) == 1:
+        # if list contains 1 rule, return the matches found
+        retval = prefixes
+    else:
+        # list contains more rules.
+        # For each prefix already found, remove it from message and try to match rest
+        #   of rule_list to the remaining message.  Then add prefix to each suffix and
+        #   add resulting string to retval as a match for the rule_list
+        for p in prefixes:
+            suffixes = get_matched_for_list(message[len(p):], rule_list[1:], syntax)
+            for s in suffixes:
+                retval.add(p + s)
+    return retval
+
+
+def get_matched_for_rule(message, rule, syntax):
+    '''  Return a set of valid message[:k] that match the given rule
+            message   = a string;  e.g.  'ababaaab'
+            rule_list = a list of integers;  e.g. [8, 11] or [4]
+            syntax    = dict containing rules;  syntax[rule_num] = [ rule_list1, rule_list2 ]
+    '''
+    retval = set()
+    if len(message) == 0:
+        pass
+    elif rule in ["a", "b"]:
+        # If rule is a string char that matches first char of message, return it.
+        if message[0] == rule:
+            retval.add(rule)
+        # else chars don't match, return empty set
+    else:
+        # rule is a number, attempt to match message to each rule_list in syntax[rule]
+        for rule_list in syntax[rule]:
+            retval = retval.union(get_matched_for_list(message, rule_list, syntax))
+    return retval
+
+#######################################################################################
+
+lines = get_string_input('prob37.txt')
+syntax, messages = get_syntax_and_messages(lines)
+
+match_count = 0
+match_count = sum([m in get_matched_for_rule(m, '0', syntax) for m in messages])
+logging.info("Problem 37. The number of messages that match rule 0 is {}.".format(match_count,))
+
+# Change rules per problem description for Problem 38
+syntax['8'] = [['42'], ['42','8']]
+syntax['11'] = [['42', '31'], ['42','11','31']]
+match_count = sum([m in get_matched_for_rule(m, '0', syntax) for m in messages])
+logging.info("Problem 38. The number of messages that match rule 0 is {}.".format(match_count,))
+
